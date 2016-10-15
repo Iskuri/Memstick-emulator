@@ -83,10 +83,10 @@ static const uint8_t scsi_inquiry_data[] = {
   0x00,
   0x00,
 				/* Vendor Identification */
-  'F', 'S', 'I', 'J', ' ', ' ', ' ', ' ',
+  'U', 'n', 'k', 'n', 'o', 'w', 'n', ' ',
 				/* Product Identification */
-  'F', 'r', 'a', 'u', 'c', 'h', 'e', 'k',
-  'y', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
+  'F', 'a', 'k', 'e', ' ', 'u', 's', 'b',
+  ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
 				/* Product Revision Level */
   '1', '.', '0', ' '
 };
@@ -133,6 +133,7 @@ struct Csw {
 #define BLOCK_READ 0x28
 #define BLOCK_WRITE 0x2a
 #define UNKNOWN_COMMAND 0x5a
+#define SYNCHRONIZE_CACHE 0x35
 
 uint32_t changeEndianness32(uint32_t num) {
 
@@ -153,11 +154,11 @@ static void* outCheck(void* nothing) {
 
 		int readVal = read(outEp,(unsigned char*)&cbw,sizeof(struct Cbw));
 
-		printf("sig %08x tag: %08x dir: %02x length %d cmdlen: %d command: ",cbw.sig,cbw.tag,cbw.direction,cbw.length,cbw.cmdlen);
-		for(int i = 0 ; i < cbw.cmdlen ; i++) {
-			printf("%02x ",cbw.cmd[i]);
-		}
-		printf("\n");
+		// printf("sig %08x tag: %08x dir: %02x length %d cmdlen: %d command: ",cbw.sig,cbw.tag,cbw.direction,cbw.length,cbw.cmdlen);
+		// for(int i = 0 ; i < cbw.cmdlen ; i++) {
+		// 	printf("%02x ",cbw.cmd[i]);
+		// }
+		// printf("\n");
 
 		if(cbw.sig == CBW_SIGNATURE) {
 
@@ -179,7 +180,7 @@ static void* outCheck(void* nothing) {
 					break;
 				}
 				case TEST_UNIT:
-					
+					printf("Pinging\n");
 					break;
 				case INQUIRY:
 
@@ -236,10 +237,9 @@ static void* outCheck(void* nothing) {
 
 					// for(int i = 0 ; i < (cbw.length/FILE_BLOCK_SIZE) ; i++) {
 
-					int fatFileReadRet = read(fatFile,cbwBuff,FILE_BLOCK_SIZE);
-					printf("Reading offset: %08x ret: %d\n",offsetPointer,fatFileReadRet);
-					write(inEp,cbwBuff,FILE_BLOCK_SIZE);
-					printf("After file write\n");
+					int fatFileReadRet = read(fatFile,cbwBuff,cbw.length);
+					printf("Reading offset: %08x(%08x) ret: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE,fatFileReadRet);
+					write(inEp,cbwBuff,cbw.length);
 					csw.residue = FILE_BLOCK_SIZE;
 					// }
 
@@ -256,22 +256,34 @@ static void* outCheck(void* nothing) {
 					lseek(fatFile,offsetPointer * FILE_BLOCK_SIZE,SEEK_SET);
 
 					// for(int i = 0 ; i < (cbw.length/FILE_BLOCK_SIZE) ; i++) {
-					read(outEp,cbwBuff,FILE_BLOCK_SIZE);
+					read(outEp,cbwBuff,cbw.length);
 
-					int fatFileReadRet = write(fatFile,cbwBuff,FILE_BLOCK_SIZE);
+					int fatFileReadRet = write(fatFile,cbwBuff,cbw.length);
 					printf("write offset: %08x ret: %d\n",offsetPointer,fatFileReadRet);
 					csw.residue = FILE_BLOCK_SIZE;
 					// }
 
 					break;
 				}
-				// case UNKNOWN_COMMAND:
+				case SYNCHRONIZE_CACHE:
 
-				// 	break;
+					break;
+				case UNKNOWN_COMMAND:
+					csw.status = 1;
+
+					memset(cbwBuff,0x00,cbw.length);
+					write(inEp,cbwBuff,cbw.length);
+
+					break;
 				default:
 					printf("Unknown cbw command: %02x\n",cbw.cmd[0]);
 					csw.status = 1;
-					csw.residue = 0;
+					memset(cbwBuff,0x00,cbw.length);
+					if(cbw.direction&0x80) {
+						write(inEp,cbwBuff,cbw.length);						
+					} else {
+						read(inEp,cbwBuff,cbw.length);
+					}
 					break;
 			}
 
