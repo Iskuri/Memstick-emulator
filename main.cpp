@@ -97,6 +97,33 @@ unsigned char dumpedDescriptor[] = {
 unsigned char outEpDesc[] = {0x01,0x00,0x00,0x00,0x07, 0x05, 0x02, 0x02, 0x00, 0x02, 0x00,0x07, 0x05, 0x02, 0x02, 0x00, 0x02, 0x00};
 unsigned char inEpDesc[] = {0x01,0x00,0x00,0x00,0x07, 0x05, 0x81, 0x02, 0x00, 0x02, 0x00,0x07, 0x05, 0x81, 0x02, 0x00, 0x02, 0x00};
 
+void setupEpSize() {
+
+	// uint8_t msB = (FILE_BLOCK_SIZE&0xff00)>>8;
+	// uint8_t lsB = (FILE_BLOCK_SIZE&0xff);
+
+	// outEpDesc[8] = lsB;
+	// outEpDesc[9] = msB;
+	// outEpDesc[15] = lsB;
+	// outEpDesc[16] = msB;
+
+	// inEpDesc[8] = lsB;
+	// inEpDesc[9] = msB;
+	// inEpDesc[15] = lsB;
+	// inEpDesc[16] = msB;
+
+	// dumpedDescriptor[26] = lsB;
+	// dumpedDescriptor[27] = msB;
+	// dumpedDescriptor[33] = lsB;
+	// dumpedDescriptor[34] = msB;
+
+	// dumpedDescriptor[58] = lsB;
+	// dumpedDescriptor[59] = msB;
+	// dumpedDescriptor[65] = lsB;
+	// dumpedDescriptor[66] = msB;
+
+}
+
 uint8_t borrowedSenseData[] = {
   0x70,			  
   0x00,
@@ -537,6 +564,7 @@ static void* gadgetCfgCb(void* nothing) {
 
 int main() {
 
+	setupEpSize();
 	setupMbr();
 
 	mkdir("/dev/gadget/",455);
@@ -549,8 +577,9 @@ int main() {
 	}
 
 	fatFile = open("file.img",O_RDWR);
-
 	fileSize = lseek(fatFile, 0, SEEK_END);
+
+	// fileSize = FILE_SIZE;
 
 	gadgetFile = open("/dev/gadget/musb-hdrc", O_RDWR);
 
