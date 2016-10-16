@@ -21,7 +21,7 @@
 
 int gadgetFile, outEp, inEp;
 
-int fatFile;
+int fatFile, fileSize;
 
 static pthread_t gadgetThread, outThread, inThread;
 
@@ -30,8 +30,54 @@ static pthread_t gadgetThread, outThread, inThread;
 // mess with device and block size
 // ignoring lots of 5a and 1a commands turns ps3 off
 
-#define FILE_SIZE 0x1000000
+#define FILE_SIZE 0xC000000
 #define FILE_BLOCK_SIZE 512
+
+// dosfs header
+// 00000000  eb 58 90 6d 6b 64 6f 73  66 73 00 00 02 01 20 00  |.X.mkdosfs.... .|
+// 00000010  02 00 00 00 80 f8 00 00  20 00 40 00 00 00 00 00  |........ .@.....|
+// 00000020  00 00 00 00 fc 00 00 00  00 00 00 00 02 00 00 00  |................|
+// 00000030  01 00 06 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+// 00000040  00 00 29 05 a2 5e c6 20  20 20 20 20 20 20 20 20  |..)..^.         |
+// 00000050  20 20 46 41 54 33 32 20  20 20 0e 1f be 77 7c ac  |  FAT32   ...w|.|
+// 00000060  22 c0 74 0b 56 b4 0e bb  07 00 cd 10 5e eb f0 32  |".t.V.......^..2|
+// 00000070  e4 cd 16 cd 19 eb fe 54  68 69 73 20 69 73 20 6e  |.......This is n|
+// 00000080  6f 74 20 61 20 62 6f 6f  74 61 62 6c 65 20 64 69  |ot a bootable di|
+// 00000090  73 6b 2e 20 20 50 6c 65  61 73 65 20 69 6e 73 65  |sk.  Please inse|
+// 000000a0  72 74 20 61 20 62 6f 6f  74 61 62 6c 65 20 66 6c  |rt a bootable fl|
+// 000000b0  6f 70 70 79 20 61 6e 64  0d 0a 70 72 65 73 73 20  |oppy and..press |
+// 000000c0  61 6e 79 20 6b 65 79 20  74 6f 20 74 72 79 20 61  |any key to try a|
+// 000000d0  67 61 69 6e 20 2e 2e 2e  20 0d 0a 00 00 00 00 00  |gain ... .......|
+// 000000e0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 00 00  |................|
+// *
+// 000001f0  00 00 00 00 00 00 00 00  00 00 00 00 00 00 55 aa  |..............U.|
+
+unsigned char mbr[0x200] = {
+	0xeb, 0x58, 0x90, 0x6d, 0x6b, 0x64, 0x6f, 0x73, 0x66, 0x73, 0x00, 0x00, 0x02, 0x01, 0x20, 0x00,
+	0x02, 0x00, 0x00, 0x00, 0x80, 0xf8, 0x00, 0x00, 0x20, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
+	0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x29, 0x05, 0xa2, 0x5e, 0xc6, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
+	0x20, 0x20, 0x46, 0x41, 0x54, 0x33, 0x32, 0x20, 0x20, 0x20, 0x0e, 0x1f, 0xbe, 0x77, 0x7c, 0xac,
+	0x22, 0xc0, 0x74, 0x0b, 0x56, 0xb4, 0x0e, 0xbb, 0x07, 0x00, 0xcd, 0x10, 0x5e, 0xeb, 0xf0, 0x32,
+	0xe4, 0xcd, 0x16, 0xcd, 0x19, 0xeb, 0xfe, 0x54, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x6e,
+	0x6f, 0x74, 0x20, 0x61, 0x20, 0x62, 0x6f, 0x6f, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x20, 0x64, 0x69,
+	0x73, 0x6b, 0x2e, 0x20, 0x20, 0x50, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x20, 0x69, 0x6e, 0x73, 0x65,
+	0x72, 0x74, 0x20, 0x61, 0x20, 0x62, 0x6f, 0x6f, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x20, 0x66, 0x6c,
+	0x6f, 0x70, 0x70, 0x79, 0x20, 0x61, 0x6e, 0x64, 0x0d, 0x0a, 0x70, 0x72, 0x65, 0x73, 0x73, 0x20,
+	0x61, 0x6e, 0x79, 0x20, 0x6b, 0x65, 0x79, 0x20, 0x74, 0x6f, 0x20, 0x74, 0x72, 0x79, 0x20, 0x61,
+	0x67, 0x61, 0x69, 0x6e, 0x20, 0x2e, 0x2e, 0x2e, 0x20, 0x0d, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00,
+	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
+};
+
+void setupMbr() {
+
+	memset(&mbr[0xe0],0x0,0x200-0xe0);
+	mbr[510] = 0x55;
+	mbr[511] = 0xaa;
+
+
+}
 
 unsigned char fileBuff[FILE_SIZE];
 
@@ -52,42 +98,39 @@ unsigned char outEpDesc[] = {0x01,0x00,0x00,0x00,0x07, 0x05, 0x02, 0x02, 0x00, 0
 unsigned char inEpDesc[] = {0x01,0x00,0x00,0x00,0x07, 0x05, 0x81, 0x02, 0x00, 0x02, 0x00,0x07, 0x05, 0x81, 0x02, 0x00, 0x02, 0x00};
 
 uint8_t borrowedSenseData[] = {
-  0x70,			  /* Response Code: fixed, current */
+  0x70,			  
   0x00,
-  0x02,			  /* Sense Key */
+  0x02,			  
   0x00, 0x00, 0x00, 0x00,
-  0x0a,			  /* Additional Sense Length */
+  0x0a,			  
   0x00, 0x00, 0x00, 0x00,
-  0x3a,			  /* ASC (additional sense code) */
-  0x00,			  /* ASCQ (additional sense code qualifier) */
+  0x3a,			 
+  0x00,			  
   0x00,
   0x00, 0x00, 0x00,
 };
 
-static const uint8_t scsi_inquiry_data_00[] = { 0, 0, 0, 0, 0 };
+uint8_t scsi_inquiry_data_00[] = { 0, 0, 0, 0, 0 };
 
-static const uint8_t scsi_inquiry_data_83[] = {
+uint8_t scsi_inquiry_data_83[] = {
   0x00,
-  0x83,   /* page code 0x83 */
-  0x00,   /* page length MSB */
-  0x00    /* page length LSB */
+  0x83,   
+  0x00,   
+  0x00    
 };
 
-static const uint8_t scsi_inquiry_data[] = {
-  0x00,				/* Direct Access Device.      */
-  0x80,				/* RMB = 1: Removable Medium. */
-  0x00,				/* Version: does not claim conformance.  */
-  0x02,				/* Response format: SPC-3.    */
-  36 - 4,			/* Additional Length.         */
+uint8_t scsi_inquiry_data[] = {
+  0x00,				
+  0x80,				
+  0x00,				
+  0x02,				
+  0x20,			
   0x00,
   0x00,
   0x00,
-				/* Vendor Identification */
   'U', 'n', 'k', 'n', 'o', 'w', 'n', ' ',
-				/* Product Identification */
   'F', 'a', 'k', 'e', ' ', 'u', 's', 'b',
   ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ',
-				/* Product Revision Level */
   '1', '.', '0', ' '
 };
 
@@ -132,8 +175,9 @@ struct Csw {
 #define MODE_SENSE 0x1a
 #define BLOCK_READ 0x28
 #define BLOCK_WRITE 0x2a
-#define UNKNOWN_COMMAND 0x5a
+#define MODE_SENSE_10 0x5a
 #define SYNCHRONIZE_CACHE 0x35
+#define ALLOW_REMOVE 0x1e
 
 uint32_t changeEndianness32(uint32_t num) {
 
@@ -175,6 +219,8 @@ static void* outCheck(void* nothing) {
 
 					uint8_t allocationLength = cbw.cmd[4];
 
+					// csw.residue = sizeof(borrowedSenseData);
+
 					write(inEp,borrowedSenseData,cbw.length);
 
 					break;
@@ -184,11 +230,14 @@ static void* outCheck(void* nothing) {
 					break;
 				case INQUIRY:
 
+					printf("Got inquiry: %02x %02x\n",cbw.cmd[1],cbw.cmd[2]);
+
 					if(cbw.cmd[1]&0x01) {
 
 						if(cbw.cmd[2] == 0x83) {
 							write(inEp,scsi_inquiry_data_83,sizeof(scsi_inquiry_data_83));
 						} else {
+							scsi_inquiry_data_00[1] = cbw.cmd[2];
 							write(inEp,scsi_inquiry_data_00,sizeof(scsi_inquiry_data_00));
 						}
 
@@ -200,20 +249,11 @@ static void* outCheck(void* nothing) {
 					break;
 				case READ_CAPACITY: {
 
-					printf("Capcities: %08x %d = %08x\n",FILE_SIZE,FILE_BLOCK_SIZE,FILE_SIZE/FILE_BLOCK_SIZE);
-					uint32_t numberOfBlocks = changeEndianness32(FILE_SIZE/FILE_BLOCK_SIZE);
+					printf("Capcities: %08x %d = %08x\n",fileSize,FILE_BLOCK_SIZE,fileSize/FILE_BLOCK_SIZE);
+					uint32_t numberOfBlocks = changeEndianness32(fileSize/FILE_BLOCK_SIZE);
 					uint32_t blockSize = changeEndianness32(FILE_BLOCK_SIZE);
 					memcpy(cbwBuff,(unsigned char*)&numberOfBlocks,4);
 					memcpy(&cbwBuff[4],(unsigned char*)&blockSize,4);
-
-				    // cbwBuff[0]  = (uint8_t)((numberOfBlocks - 1) >> 24);
-				    // cbwBuff[1]  = (uint8_t)((numberOfBlocks - 1) >> 16);
-				    // cbwBuff[2]  = (uint8_t)((numberOfBlocks - 1) >> 8);
-				    // cbwBuff[3]  = (uint8_t)((numberOfBlocks - 1) >> 0);
-				    // cbwBuff[4]  = (uint8_t)(blockSize >> 24);
-				    // cbwBuff[5]  = (uint8_t)(blockSize >> 16);
-				    // cbwBuff[6] = (uint8_t)(blockSize >> 8);
-				    // cbwBuff[7] = (uint8_t)(blockSize >> 0);
 
 					write(inEp,cbwBuff,8);
 					break;
@@ -259,19 +299,23 @@ static void* outCheck(void* nothing) {
 					read(outEp,cbwBuff,cbw.length);
 
 					int fatFileReadRet = write(fatFile,cbwBuff,cbw.length);
-					printf("write offset: %08x ret: %d\n",offsetPointer,fatFileReadRet);
+					printf("Writing offset: %08x ret: %d\n",offsetPointer,fatFileReadRet);
 					csw.residue = FILE_BLOCK_SIZE;
 					// }
 
 					break;
 				}
 				case SYNCHRONIZE_CACHE:
-
+				case ALLOW_REMOVE:
 					break;
-				case UNKNOWN_COMMAND:
-					csw.status = 1;
+				case MODE_SENSE_10:
+					// csw.status = 1;
+
+					// memset(cbwBuff,0x00,cbw.length);
+					// write(inEp,cbwBuff,cbw.length);
 
 					memset(cbwBuff,0x00,cbw.length);
+					cbwBuff[0] = 0x03;
 					write(inEp,cbwBuff,cbw.length);
 
 					break;
@@ -298,20 +342,69 @@ static void* outCheck(void* nothing) {
 
 }
 
+char* constructStringDesc(char* name) {
+
+	char* newStringDesc = (char*)malloc(strlen(name)*2+2);
+
+	memset(newStringDesc,0x00,strlen(name)*2+2);
+
+	newStringDesc[1] = 0x03; // type constant string
+
+	for(int i = 0 ; i < strlen(name) ; i++) {
+
+		newStringDesc[i*2+2] = name[i];
+	}
+
+	newStringDesc[0] = strlen(name)*2+2;
+
+	return newStringDesc;
+}
+
 static void handleSetup(struct usb_ctrlrequest *setup) {
 	
 	uint16_t value = __le16_to_cpu(setup->wValue);
 	uint16_t index = __le16_to_cpu(setup->wIndex);
 	uint16_t length = __le16_to_cpu(setup->wLength);
 
-	//printf("Got USB bRequest: %d(%02x) with type %d(%02x dir:(%02x)) value: %04x of length %d\n",setup->bRequest,setup->bRequest,setup->bRequestType, setup->bRequestType, setup->bRequestType&0x80, value, setup->wLength);
+	// printf("Got USB bRequest: %d(%02x) with type %d(%02x dir:(%02x)) value: %04x of length %d\n",setup->bRequest,setup->bRequest,setup->bRequestType, setup->bRequestType, setup->bRequestType&0x80, value, setup->wLength);
 
 	// start transactions
 
 	unsigned char* buf = (unsigned char*)malloc(length);
 
+	char dtStringData[4] = {0x04, 0x03, 0x09, 0x04};
+
 	switch(setup->bRequest) {
 
+		case USB_REQ_GET_DESCRIPTOR: {
+
+			char* descriptorPtr;
+
+			switch(value) {
+				case 0x0300:
+					descriptorPtr = constructStringDesc("VENDOR");
+					break;
+				case 0x0301:
+					descriptorPtr = constructStringDesc("PRODUCT");
+					break;
+				case 0x0302:
+					descriptorPtr = constructStringDesc("SERIAL");
+					break;
+				default:
+					descriptorPtr = (char*)&dtStringData;
+					break;
+			}
+
+			// printf("String desc: ");
+			// for(int i = 0 ; i < length ; i++) {
+			// 	printf("%02x ",descriptorPtr[i]);
+			// }
+			// printf("\n");
+
+			write(gadgetFile,descriptorPtr,length);
+
+			break;		
+		}
 		case USB_REQ_SET_CONFIGURATION:
 			//printf("set Configuration value %d\n",value);
 			read(gadgetFile, NULL, 0);
@@ -334,10 +427,21 @@ static void handleSetup(struct usb_ctrlrequest *setup) {
 
 			read(gadgetFile, buf, length);
 
-			//printf("Got ff buff\n");
+			//printf("Got reset buff\n");
 
 			break;
+		default:
 
+			printf("Unknown bRequest: %02x\n",setup->bRequest);
+
+			// stall unknown request
+			if(setup->bRequestType&0x80) {
+				read(gadgetFile,NULL,0);
+			} else {
+				write(gadgetFile,NULL,0);
+			}
+
+			break;
 	}	
 
 	free(buf);
@@ -416,6 +520,9 @@ static void* gadgetCfgCb(void* nothing) {
 					case GADGETFS_SUSPEND:
 						printf("Suspend\n");
 						break;
+					case 5:
+						printf("Possibly reset\n");
+						break;
 					default:
 						printf("Unknown type: %d\n",events[i].type);
 						exit(0);
@@ -430,6 +537,8 @@ static void* gadgetCfgCb(void* nothing) {
 
 int main() {
 
+	setupMbr();
+
 	mkdir("/dev/gadget/",455);
 	umount2("/dev/gadget/", MNT_FORCE);
 	int mountRet = mount("none", "/dev/gadget/", "gadgetfs", 0, "");
@@ -440,6 +549,8 @@ int main() {
 	}
 
 	fatFile = open("file.img",O_RDWR);
+
+	fileSize = lseek(fatFile, 0, SEEK_END);
 
 	gadgetFile = open("/dev/gadget/musb-hdrc", O_RDWR);
 
