@@ -291,9 +291,9 @@ void setupMbr() {
 	// faTable[3] = 0xffffffff;
 	// faTable[4] = 0xffffffff;
 
-	faTable[0] = 0xf8ffff0f; 
-	faTable[1] = 0xffffff07;
-
+	// faTable[0] = 0xf8ffff0f; 
+	// faTable[1] = 0xffffff07;
+	faTable[2] = 0xffffffff;
 
 	for(int i = 0 ; i < 15 ; i++) {
 
@@ -317,41 +317,31 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
 	// printf("Processing read on: %d\n",offsetPointer);
 
-	if(offsetPointer < 4) {
+	if(offsetPointer < 2) {
 
 		memcpy(cbwBuff,&fullMbr[offsetPointer*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
 
-
 	} else if(offsetPointer >= 0x20 && offsetPointer < 0x60) {
-	// } else if(offsetPointer >= 0x20) {
 	
 		int actualOffset = offsetPointer-0x20;
 
-		// printf("Actual offset: %d\n",actualOffset);
-
 		memcpy(cbwBuff,&faTable[actualOffset*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
-		// memcpy(cbwBuff,(unsigned char*)&faTable,FILE_BLOCK_SIZE);
 
-	// } else if(offsetPointer == 96) {
-		// memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
+	}else if(offsetPointer == 7910) {
 
-	// } else if(offsetPointer == 536) {
+		struct fatCluster dirCluster;
+		char laMp3[] = "LA.MP3";
+		memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
+		dirCluster.attrib = ATTRIB_READONLY;
+		dirCluster.firstClusterHigh = 0x00aa;
+		dirCluster.firstClusterLow = 0x0000;
+		dirCluster.fileSize = 1024;
 
-		// printf("Attempting directory\n");
+		memcpy(cbwBuff,(unsigned char*)&dirCluster,sizeof(struct fatCluster));
 
-		// struct fatCluster dirCluster;
-		// char laMp3[] = "LA.MP3";
-		// memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
-		// dirCluster.attrib = ATTRIB_READONLY;
-		// dirCluster.firstClusterHigh = 0x00aa;
-		// dirCluster.firstClusterLow = 0x0000;
-		// dirCluster.fileSize = 1024;
-
-		// memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
-		// memcpy(cbwBuff,(unsigned char*)&dirCluster,sizeof(struct fatCluster));
 
 	} else {
-		// printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
+		printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
 		// exit(1);
 		memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
 	}
