@@ -70,9 +70,12 @@ uint32_t changeEndianness32(uint32_t num) {
 #define ATTRIB_ARCHIVE 0x20
 
 struct fatCluster {
-	char sfname[11];
+	char sfname[8];
+	char sfext[3];
 	uint8_t attrib;
-	uint16_t firstClusterHigh;
+	unsigned char extra[10];
+	uint16_t time1;
+	uint16_t time2;
 	uint16_t firstClusterLow;
 	uint32_t fileSize;
 } __attribute__((packed));
@@ -294,21 +297,15 @@ void setupMbr() {
 	// faTable[0] = 0xf8ffff0f; 
 	// faTable[1] = 0xffffff07;
 	faTable[2] = 0xffffffff;
+}
 
-	for(int i = 0 ; i < 15 ; i++) {
+void constructFat() {
 
-		struct fatCluster dirCluster;
-		char laMp3[] = "LA.MP3";
-		memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
-		dirCluster.attrib = ATTRIB_READONLY;
-		dirCluster.firstClusterHigh = 0x00aa;
-		dirCluster.firstClusterLow = 0x0000;
-		dirCluster.fileSize = 1024;
+	memset(faTable,0xff,sizeof(faTable));
 
-		memcpy(&faTable[(i+1)*128],(unsigned char*)&dirCluster,sizeof(struct fatCluster));
+	
 
-	}
-
+	
 }
 
 // #define IMAGE_MODE
@@ -329,19 +326,47 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
 	}else if(offsetPointer == 7910) {
 
-		struct fatCluster dirCluster;
-		char laMp3[] = "LA.MP3";
-		memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
-		dirCluster.attrib = ATTRIB_READONLY;
-		dirCluster.firstClusterHigh = 0x00aa;
-		dirCluster.firstClusterLow = 0x0000;
-		dirCluster.fileSize = 1024;
+		// struct fatCluster dirCluster;
+		// char laMp3[] = "LA.MP3";
+		// memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
+		// dirCluster.attrib = ATTRIB_READONLY;
+		// dirCluster.firstClusterHigh = 0x00aa;
+		// dirCluster.firstClusterLow = 0x0000;
+		// dirCluster.fileSize = 1024;
 
-		memcpy(cbwBuff,(unsigned char*)&dirCluster,sizeof(struct fatCluster));
+		// memcpy(cbwBuff,(unsigned char*)&dirCluster,sizeof(struct fatCluster));
+
+		for(int i = 0 ; i < (512/32) ; i++) {
+
+			struct fatCluster dirCluster;
+
+			memset((void*)&dirCluster,0x00,sizeof(struct fatCluster));
+
+			char laMp3[] = "LA%d";
+			char ext[] = "MP3";
+			//memset(dirCluster.sfname,0x00,sizeof(dirCluster.sfname));
+			sprintf(dirCluster.sfname,laMp3,i);
+			for(int j = 0 ; j < 8 ; j++) {
+
+				if(dirCluster.sfname[j] == 0x00) dirCluster.sfname[j] = 0x20;
+			}
+
+			memcpy(dirCluster.sfext,ext,3);
+			dirCluster.attrib = 0x00;
+			dirCluster.firstClusterLow = i+3;
+//			dirCluster.fileSize = 32*1024*1024;
+			// dirCluster.fileSize = 0x00;
+			dirCluster.fileSize = 512;
+
+			memcpy(&cbwBuff[i*32],(unsigned char*)&dirCluster,sizeof(struct fatCluster));
+
+			// printf("Fat size: %d\n",sizeof(struct fatCluster));
+
+		}
 
 
 	} else {
-		printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
+		// printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
 		// exit(1);
 		memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
 	}
@@ -836,6 +861,8 @@ int main() {
 
 	setupEpSize();
 	setupMbr();
+
+	constructFat();
 
 	mkdir("/dev/gadget/",455);
 	umount2("/dev/gadget/", MNT_FORCE);
