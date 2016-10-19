@@ -1,2 +1,2 @@
 all:
-	g++ -lpthread main.cpp -o memstick-emulator
+	g++ -lpthread main.cpp -o mem

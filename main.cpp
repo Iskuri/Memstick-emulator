@@ -18,6 +18,7 @@
 #include <cstring>
 #include <sys/mount.h>
 #include "signal.h"
+#include <dirent.h>
 
 int gadgetFile, outEp, inEp;
 
@@ -272,7 +273,7 @@ unsigned char fullMbr[] = {
   0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
 };
 
-uint32_t faTable[32768];
+uint32_t* faTable;
 
 void setupMbr() {
 
@@ -280,35 +281,151 @@ void setupMbr() {
 	mbr[510] = 0x55;
 	mbr[511] = 0xaa;
 
-	memset(faTable,0x00,32768);
+	// memset(faTable,0x00,32768);
 
-	for(int i = 0 ; i < 32768 ; i++) {
-	// for(int i = 0 ; i < 8192 ; i++) {
+//	faTable[2] = 0xffffffff;
+}
 
-		faTable[i] = (i+5);
-		// faTable[i] = 0;
+struct File {
+	bool isDir;
+	char name[0xff];
+	struct File* subFiles;
+	uint32_t numFiles;
+	uint32_t requiredBlocks;
+	uint32_t startBlock;
+};
+
+uint32_t constructFileTree(struct File* currFile, char* currPath) {
+
+	struct dirent* ent;
+	int fileCount = 0;
+
+	uint32_t blockCount = 0;
+
+	DIR* dir;
+
+	if ((dir = opendir (currPath)) != NULL) {
+		while ((ent = readdir (dir)) != NULL) {
+
+			if((ent->d_type == DT_REG || ent->d_type == DT_DIR) && ent->d_name[0] != '.') {
+				fileCount++;
+			}
+		}
+
+		currFile->numFiles = fileCount;
+		currFile->subFiles =  (struct File*)malloc(fileCount*sizeof(struct File));
+
+		closedir (dir);
+
+		dir = opendir (currPath);
+		int inc = 0;
+
+		blockCount += (fileCount*32/FILE_BLOCK_SIZE)+1;
+
+		currFile->requiredBlocks = blockCount;
+
+		while ((ent = readdir (dir)) != NULL) {
+
+			if((ent->d_type == DT_REG || ent->d_type == DT_DIR) && ent->d_name[0] != '.') {
+				printf ("%s/%s\n",currPath,ent->d_name);
+				
+				currFile->subFiles[inc].isDir = (ent->d_type==DT_DIR);
+				currFile->subFiles[inc].numFiles = 0;
+				memcpy(currFile->subFiles[inc].name,ent->d_name,strlen(ent->d_name));
+
+				char* newFilePath = (char*)malloc(strlen(currPath)+strlen(ent->d_name)+10);
+				sprintf(newFilePath,"%s/%s",currPath,ent->d_name);
+
+				if(currFile->subFiles[inc].isDir) {
+
+					blockCount += constructFileTree(&currFile->subFiles[inc],newFilePath);
+
+				} else {
+
+					int tmpFile = open(newFilePath,O_RDWR);
+
+					currFile->subFiles[inc].requiredBlocks = (lseek(tmpFile, 0, SEEK_END)/FILE_BLOCK_SIZE)+1;
+
+					blockCount += currFile->subFiles[inc].requiredBlocks;
+
+					close(tmpFile);
+				}
+				free(newFilePath);
+				inc++;
+			}
+		}
+
+		closedir(dir);
+
 	}
 
-	// faTable[1] = 0xffffffff;
-	// faTable[2] = 0xffffffff;
-	// faTable[3] = 0xffffffff;
-	// faTable[4] = 0xffffffff;
+	return blockCount;
 
-	// faTable[0] = 0xf8ffff0f; 
-	// faTable[1] = 0xffffff07;
-	faTable[2] = 0xffffffff;
 }
+
+uint32_t currBlock = 2;
+
+void constructFatSectors(struct File* currFile) {
+
+	// faTable[currBlock] = 0xffffffff;
+
+	currFile->startBlock = currBlock;
+
+	for(int i = 0 ; i < currFile->requiredBlocks ; i++) {
+
+		faTable[currBlock] = currBlock+1;
+
+		currBlock++;
+
+		faTable[currBlock] = 0xffffffff;	
+	}
+
+	for(int i = 0 ; i < currFile->numFiles ; i++) {
+		constructFatSectors(&currFile->subFiles[i]);
+	}
+
+
+}
+
+uint32_t treeBlocks, fatSectors;
 
 void constructFat() {
 
-	memset(faTable,0xff,sizeof(faTable));
+	uint32_t currSector = 3;
 
+	struct File rootDir;
+	rootDir.isDir = true;
+	memcpy(rootDir.name,".",2);
 	
+	treeBlocks = constructFileTree(&rootDir,".");
 
-	
+	fatSectors = treeBlocks*4/512+1;
+
+	printf("File tree requires %d(0x%x) blocks fat takes: %d blocks\n",treeBlocks,treeBlocks,fatSectors);
+
+	faTable = (uint32_t*)malloc(treeBlocks*4);
+
+	memset(faTable,0x00,treeBlocks*4);
+
+	memcpy(&fullMbr[0x20],&treeBlocks,4);
+	memcpy(&fullMbr[0x24],&fatSectors,4);
+
+	// uint32_t newOffset = 2;
+	// memcpy(&fullMbr[44],&newOffset,4);
+
+	fileSize = treeBlocks*512 + treeBlocks * 8;
+
+	constructFatSectors(&rootDir);
+
 }
 
 // #define IMAGE_MODE
+
+void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
+
+	// recursively search for appropriate file data from offsets
+
+}
 
 void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
@@ -318,54 +435,23 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
 		memcpy(cbwBuff,&fullMbr[offsetPointer*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
 
-	} else if(offsetPointer >= 0x20 && offsetPointer < 0x60) {
-	
+	} else if(offsetPointer >= 0x20 && (offsetPointer-0x20) < (fatSectors*2)) {
 		int actualOffset = offsetPointer-0x20;
-
 		memcpy(cbwBuff,&faTable[actualOffset*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
+	}else {
 
-	}else if(offsetPointer == 7910) {
+		uint32_t sectorOffset = (offsetPointer)-(fatSectors*2)-0x20;
 
-		// struct fatCluster dirCluster;
-		// char laMp3[] = "LA.MP3";
-		// memcpy(dirCluster.sfname,(unsigned char*)&laMp3,sizeof(laMp3));
-		// dirCluster.attrib = ATTRIB_READONLY;
-		// dirCluster.firstClusterHigh = 0x00aa;
-		// dirCluster.firstClusterLow = 0x0000;
-		// dirCluster.fileSize = 1024;
+		printf("Reading cluster: %d\n",sectorOffset);
 
-		// memcpy(cbwBuff,(unsigned char*)&dirCluster,sizeof(struct fatCluster));
+		processCluster(cbwBuff,sectorOffset);
 
-		for(int i = 0 ; i < (512/32) ; i++) {
+		// 	memcpy(dirCluster.sfext,ext,3);
+		// 	dirCluster.attrib = 0x00;
+		// 	dirCluster.firstClusterLow = i+3;
+		// 	dirCluster.fileSize = 512;
+		// 	memcpy(&cbwBuff[i*32],(unsigned char*)&dirCluster,sizeof(struct fatCluster));
 
-			struct fatCluster dirCluster;
-
-			memset((void*)&dirCluster,0x00,sizeof(struct fatCluster));
-
-			char laMp3[] = "LA%d";
-			char ext[] = "MP3";
-			//memset(dirCluster.sfname,0x00,sizeof(dirCluster.sfname));
-			sprintf(dirCluster.sfname,laMp3,i);
-			for(int j = 0 ; j < 8 ; j++) {
-
-				if(dirCluster.sfname[j] == 0x00) dirCluster.sfname[j] = 0x20;
-			}
-
-			memcpy(dirCluster.sfext,ext,3);
-			dirCluster.attrib = 0x00;
-			dirCluster.firstClusterLow = i+3;
-//			dirCluster.fileSize = 32*1024*1024;
-			// dirCluster.fileSize = 0x00;
-			dirCluster.fileSize = 512;
-
-			memcpy(&cbwBuff[i*32],(unsigned char*)&dirCluster,sizeof(struct fatCluster));
-
-			// printf("Fat size: %d\n",sizeof(struct fatCluster));
-
-		}
-
-
-	} else {
 		// printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
 		// exit(1);
 		memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
@@ -542,7 +628,7 @@ static void* outCheck(void* nothing) {
 					break;
 				case INQUIRY:
 
-					printf("Got inquiry: %02x %02x\n",cbw.cmd[1],cbw.cmd[2]);
+					// printf("Got inquiry: %02x %02x\n",cbw.cmd[1],cbw.cmd[2]);
 
 					if(cbw.cmd[1]&0x01) {
 
@@ -589,21 +675,14 @@ static void* outCheck(void* nothing) {
 					printf("Reading offset: %08x(%08x) fullSize: %d\n",offsetPointer,(offsetPointer)*FILE_BLOCK_SIZE,cbw.length);
 					lseek(fatFile,offsetPointer * FILE_BLOCK_SIZE,SEEK_SET);
 					int fatFileReadRet = read(fatFile,cbwBuff,cbw.length);
+
+					// usleep(100000);
 #else
 					int i = 0;
 					printf("Reading offset: %08x(%08x) fullSize: %d\n",offsetPointer+i,(offsetPointer+i)*FILE_BLOCK_SIZE,cbw.length);
 					for(i = 0 ; i < (cbw.length/FILE_BLOCK_SIZE) ; i++) {
 						processRead(&cbwBuff[i*FILE_BLOCK_SIZE],offsetPointer+i);
 					}
-
-					// for(int i = 0 ; i < cbw.length ; i++) {
-					// 	printf("%02x ",cbwBuff[i]);
-					// 	if(((i+1)%16) == 0 && i > 0) {
-					// 		printf("\n");
-					// 	}
-					// }
-					// printf("\n");
-
 #endif
 					write(inEp,cbwBuff,cbw.length);
 
@@ -860,7 +939,7 @@ static void* gadgetCfgCb(void* nothing) {
 int main() {
 
 	setupEpSize();
-	setupMbr();
+	// setupMbr();
 
 	constructFat();
 
@@ -877,8 +956,8 @@ int main() {
 	fatFile = open("file.img",O_RDWR);
 	fileSize = lseek(fatFile, 0, SEEK_END);
 #else
-	fatFile = open("file.img",O_RDWR);
-	fileSize = lseek(fatFile, 0, SEEK_END);
+	// fatFile = open("file.img",O_RDWR);
+	// fileSize = lseek(fatFile, 0, SEEK_END);
 
 	// fileSize = FILE_SIZE;
 #endif
