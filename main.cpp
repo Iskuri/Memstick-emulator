@@ -289,6 +289,7 @@ void setupMbr() {
 struct File {
 	bool isDir;
 	char name[0xff];
+	char* fullPath; 
 	struct File* subFiles;
 	uint32_t numFiles;
 	uint32_t requiredBlocks;
@@ -335,6 +336,9 @@ uint32_t constructFileTree(struct File* currFile, char* currPath) {
 
 				char* newFilePath = (char*)malloc(strlen(currPath)+strlen(ent->d_name)+10);
 				sprintf(newFilePath,"%s/%s",currPath,ent->d_name);
+
+				currFile->subFiles[inc].fullPath = (char*)malloc(strlen(currPath)+strlen(ent->d_name)+10);
+				strcpy(currFile->subFiles[inc].fullPath,newFilePath);
 
 				if(currFile->subFiles[inc].isDir) {
 
@@ -388,12 +392,12 @@ void constructFatSectors(struct File* currFile) {
 }
 
 uint32_t treeBlocks, fatSectors;
+struct File rootDir;
 
 void constructFat() {
 
 	uint32_t currSector = 3;
 
-	struct File rootDir;
 	rootDir.isDir = true;
 	memcpy(rootDir.name,".",2);
 	
@@ -421,9 +425,124 @@ void constructFat() {
 
 // #define IMAGE_MODE
 
+struct File* findFileBlock(uint32_t sectorOffset, struct File* currFile) {
+
+	// rootDir->requiredBlocks;
+	// recursively find block etc values
+
+	uint32_t blockPointer = currFile->startBlock;
+	for(int i = 0 ; i < currFile->requiredBlocks ; i++) {
+
+		if(blockPointer == 0xffffffff) {
+			break;
+		}
+
+		if(blockPointer == sectorOffset) {
+			return currFile;
+		}
+
+		blockPointer = faTable[blockPointer];
+
+	}
+
+	if(currFile->isDir) {
+
+		for(int i = 0 ; i < currFile->numFiles ; i++) {
+
+			struct File* foundFile = findFileBlock(sectorOffset,&currFile->subFiles[i]);
+
+			if(foundFile != 0x00000000) {
+				return foundFile;
+			}
+
+		}
+
+	}
+
+	return 0;
+}
+
 void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 	// recursively search for appropriate file data from offsets
+
+	struct File* foundFile = findFileBlock(sectorOffset,&rootDir);
+
+	if(foundFile != 0x00000000) {
+		printf("Found file to process: %s\n",foundFile->name);
+
+		uint32_t fileOffset = 0;
+		uint32_t currBlock = foundFile->startBlock;
+
+		while(currBlock != sectorOffset) {
+			currBlock = faTable[currBlock];
+			fileOffset++;
+		}
+
+		if(foundFile->isDir) {
+
+			uint32_t dirOffset = fileOffset*(FILE_BLOCK_SIZE/sizeof(struct fatCluster));
+
+			for(int i = 0 ; i < (FILE_BLOCK_SIZE/sizeof(struct fatCluster)) ; i++) {
+
+				uint32_t fileOffset = (dirOffset+i);
+				if(fileOffset > foundFile->numFiles) {
+					break;
+				}
+
+				struct fatCluster newFolderSetting;
+
+				// struct fatCluster {
+				// 	char sfname[8];
+				// 	char sfext[3];
+				// 	uint8_t attrib;
+				// 	unsigned char extra[10];
+				// 	uint16_t time1;
+				// 	uint16_t time2;
+				// 	uint16_t firstClusterLow;
+				// 	uint32_t fileSize;
+				// } __attribute__((packed));
+
+				char* fileName = (char*)malloc(10);
+				sprintf(fileName,"FILE%d",fileOffset);
+
+				memset(newFolderSetting.sfname,0x20,8);
+
+				memcpy(newFolderSetting.sfext,"MP3",3);
+				memcpy(newFolderSetting.sfname,fileName,8);
+
+				newFolderSetting.time1 = 0x0000;
+				newFolderSetting.time2 = 0x0000;
+				newFolderSetting.firstClusterLow = 0x00aa*i;
+
+				newFolderSetting.fileSize = 0;
+
+				if(foundFile->subFiles[dirOffset].isDir) {
+					newFolderSetting.attrib = ATTRIB_DIRECTORY;
+				} else {
+					newFolderSetting.attrib = 0x00;	
+
+					int f = open(foundFile->subFiles[dirOffset].fullPath,O_RDWR);
+					newFolderSetting.fileSize = lseek(f, fileOffset*FILE_BLOCK_SIZE, SEEK_END);
+					close(f);
+
+				}
+
+				memcpy(&cbwBuff[i*sizeof(struct fatCluster)],(void*)&newFolderSetting,sizeof(struct fatCluster));
+
+			}
+
+		} else {
+
+			int f = open(foundFile->fullPath,O_RDWR);
+			lseek(f, fileOffset*FILE_BLOCK_SIZE, SEEK_SET);
+			read(f,cbwBuff,FILE_BLOCK_SIZE);
+			close(f);
+		}
+
+	} else {
+		memset(cbwBuff,0xff,FILE_BLOCK_SIZE);
+	}
 
 }
 
@@ -436,9 +555,12 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 		memcpy(cbwBuff,&fullMbr[offsetPointer*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
 
 	} else if(offsetPointer >= 0x20 && (offsetPointer-0x20) < (fatSectors*2)) {
+
+		// make sure to handle fat copy as well
 		int actualOffset = offsetPointer-0x20;
 		memcpy(cbwBuff,&faTable[actualOffset*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
-	}else {
+	
+	} else {
 
 		uint32_t sectorOffset = (offsetPointer)-(fatSectors*2)-0x20;
 
