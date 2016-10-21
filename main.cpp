@@ -26,6 +26,11 @@ int fatFile, fileSize;
 
 static pthread_t gadgetThread, outThread, inThread;
 
+uint32_t treeBlocks, fatSectors;
+
+#define MIN(a,b) (((a)<(b))?(a):(b))
+#define MAX(a,b) (((a)>(b))?(a):(b))
+
 // max lun at ff breaks ps3 - buffer issue
 // mess with all command buffers
 // mess with device and block size
@@ -296,6 +301,8 @@ struct File {
 	uint32_t startBlock;
 };
 
+struct File rootDir;
+
 uint32_t constructFileTree(struct File* currFile, char* currPath) {
 
 	struct dirent* ent;
@@ -391,9 +398,6 @@ void constructFatSectors(struct File* currFile) {
 
 }
 
-uint32_t treeBlocks, fatSectors;
-struct File rootDir;
-
 void constructFat() {
 
 	uint32_t currSector = 3;
@@ -407,9 +411,9 @@ void constructFat() {
 
 	printf("File tree requires %d(0x%x) blocks fat takes: %d blocks\n",treeBlocks,treeBlocks,fatSectors);
 
-	faTable = (uint32_t*)malloc(treeBlocks*4);
+	faTable = (uint32_t*)malloc(treeBlocks*4+10);
 
-	memset(faTable,0x00,treeBlocks*4);
+	memset(faTable,0x00,treeBlocks*4+10);
 
 	memcpy(&fullMbr[0x20],&treeBlocks,4);
 	memcpy(&fullMbr[0x24],&fatSectors,4);
@@ -462,14 +466,24 @@ struct File* findFileBlock(uint32_t sectorOffset, struct File* currFile) {
 	return 0;
 }
 
+void convertToUpperCase(char *sPtr, int length)
+{
+	for(int i = 0 ; i < length ; i++) {
+		sPtr[i] = toupper(sPtr[i]);
+	}
+}
+
 void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 	// recursively search for appropriate file data from offsets
 
 	struct File* foundFile = findFileBlock(sectorOffset,&rootDir);
 
+	memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
+
 	if(foundFile != 0x00000000) {
-		printf("Found file to process: %s\n",foundFile->name);
+
+		// printf("Found file to process: %s\n",foundFile->name);
 
 		uint32_t fileOffset = 0;
 		uint32_t currBlock = foundFile->startBlock;
@@ -486,47 +500,48 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 			for(int i = 0 ; i < (FILE_BLOCK_SIZE/sizeof(struct fatCluster)) ; i++) {
 
 				uint32_t fileOffset = (dirOffset+i);
-				if(fileOffset > foundFile->numFiles) {
+				// printf("Processing file offset: %d = %d\n",fileOffset,foundFile->numFiles);
+				if(fileOffset >= foundFile->numFiles) {
+					// printf("BREAKING\n");
 					break;
 				}
 
 				struct fatCluster newFolderSetting;
 
-				// struct fatCluster {
-				// 	char sfname[8];
-				// 	char sfext[3];
-				// 	uint8_t attrib;
-				// 	unsigned char extra[10];
-				// 	uint16_t time1;
-				// 	uint16_t time2;
-				// 	uint16_t firstClusterLow;
-				// 	uint32_t fileSize;
-				// } __attribute__((packed));
+				// char* fileName = (char*)malloc(10);
+				// sprintf(fileName,"FILE%d",fileOffset);
 
-				char* fileName = (char*)malloc(10);
-				sprintf(fileName,"FILE%d",fileOffset);
+				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
+
+				printf("Writing filename: %s\n",tok);
 
 				memset(newFolderSetting.sfname,0x20,8);
 
 				memcpy(newFolderSetting.sfext,"MP3",3);
-				memcpy(newFolderSetting.sfname,fileName,8);
+				memcpy(newFolderSetting.sfname,tok,MIN(8,strlen(tok)-1));
+
+				convertToUpperCase((char*)&newFolderSetting.sfname,8);
+
+				// free(fileName);
 
 				newFolderSetting.time1 = 0x0000;
 				newFolderSetting.time2 = 0x0000;
-				newFolderSetting.firstClusterLow = 0x00aa*i;
+				newFolderSetting.firstClusterLow = foundFile->startBlock&0xffff;
 
 				newFolderSetting.fileSize = 0;
 
-				if(foundFile->subFiles[dirOffset].isDir) {
+				if(foundFile->subFiles[i+dirOffset].isDir) {
 					newFolderSetting.attrib = ATTRIB_DIRECTORY;
 				} else {
 					newFolderSetting.attrib = 0x00;	
 
-					int f = open(foundFile->subFiles[dirOffset].fullPath,O_RDWR);
-					newFolderSetting.fileSize = lseek(f, fileOffset*FILE_BLOCK_SIZE, SEEK_END);
+					int f = open(foundFile->subFiles[i+dirOffset].fullPath,O_RDWR);
+					newFolderSetting.fileSize = lseek(f, 0, SEEK_END);
 					close(f);
 
 				}
+
+				// printf("Writing folder section: %d path: %s size: %d offset: %d\n",i+dirOffset,foundFile->subFiles[i+dirOffset].fullPath,newFolderSetting.fileSize,fileOffset);
 
 				memcpy(&cbwBuff[i*sizeof(struct fatCluster)],(void*)&newFolderSetting,sizeof(struct fatCluster));
 
@@ -548,7 +563,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
-	// printf("Processing read on: %d\n",offsetPointer);
+	// printf("Processing read on: %d(0x%02x)\n",offsetPointer,offsetPointer);
 
 	if(offsetPointer < 2) {
 
@@ -558,13 +573,20 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
 		// make sure to handle fat copy as well
 		int actualOffset = offsetPointer-0x20;
-		memcpy(cbwBuff,&faTable[actualOffset*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
+
+		// printf("Pointer offset: %d %d\n",actualOffset*FILE_BLOCK_SIZE,treeBlocks*4);
+
+		// if(actualOffset < treeBlocks) {
+			memcpy(cbwBuff,&faTable[actualOffset*FILE_BLOCK_SIZE/4],FILE_BLOCK_SIZE);
+		// }
 	
 	} else {
 
 		uint32_t sectorOffset = (offsetPointer)-(fatSectors*2)-0x20;
 
-		printf("Reading cluster: %d\n",sectorOffset);
+		// printf("Reading cluster: %d\n",sectorOffset);
+
+		memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
 
 		processCluster(cbwBuff,sectorOffset);
 
@@ -576,7 +598,6 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
 		// printf("Unknown read: %d(%08x) presumed cluster: %d\n",offsetPointer,offsetPointer*FILE_BLOCK_SIZE, ((offsetPointer*FILE_BLOCK_SIZE)-0x4000)/512);
 		// exit(1);
-		memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
 	}
 }
 
@@ -804,6 +825,16 @@ static void* outCheck(void* nothing) {
 					printf("Reading offset: %08x(%08x) fullSize: %d\n",offsetPointer+i,(offsetPointer+i)*FILE_BLOCK_SIZE,cbw.length);
 					for(i = 0 ; i < (cbw.length/FILE_BLOCK_SIZE) ; i++) {
 						processRead(&cbwBuff[i*FILE_BLOCK_SIZE],offsetPointer+i);
+
+						// for(int j = 0 ; j < FILE_BLOCK_SIZE ; j++) {
+
+						// 	printf("%02x ",cbwBuff[i*FILE_BLOCK_SIZE+j]);
+
+						// 	if(j!=0 && (j%16) == 0) {
+						// 		printf("\n");
+						// 	}
+						// }
+						// printf("\n");
 					}
 #endif
 					write(inEp,cbwBuff,cbw.length);
