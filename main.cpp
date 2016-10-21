@@ -513,7 +513,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
 
-				printf("Writing filename: %s\n",tok);
+				// printf("Writing filename: %s\n",tok);
 
 				memset(newFolderSetting.sfname,0x20,8);
 
@@ -549,9 +549,13 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 		} else {
 
+
 			int f = open(foundFile->fullPath,O_RDWR);
 			lseek(f, fileOffset*FILE_BLOCK_SIZE, SEEK_SET);
-			read(f,cbwBuff,FILE_BLOCK_SIZE);
+			int readAmount = read(f,cbwBuff,FILE_BLOCK_SIZE);
+
+			// printf("Processing file offset: %s %d %d\n",foundFile->fullPath,fileOffset, readAmount);
+
 			close(f);
 		}
 
@@ -767,7 +771,7 @@ static void* outCheck(void* nothing) {
 					break;
 				}
 				case TEST_UNIT:
-					printf("Pinging\n");
+					// printf("Pinging\n");
 					break;
 				case INQUIRY:
 
