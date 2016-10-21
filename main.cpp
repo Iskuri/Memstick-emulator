@@ -37,6 +37,7 @@ uint32_t treeBlocks, fatSectors;
 // ignoring lots of 5a and 1a commands turns ps3 off, may do same to ps4
 // weird fat32 (intial fat table repeating 128 inc over and over) crashes xmb
 // if mbr header doesn't match set file size then it will fall over
+// try making recursive folders
 
 uint32_t changeEndianness32(uint32_t num) {
 
@@ -384,6 +385,8 @@ void constructFatSectors(struct File* currFile) {
 
 	for(int i = 0 ; i < currFile->requiredBlocks ; i++) {
 
+		// printf("Assigning block: %d to %s\n",currBlock,currFile->fullPath);
+
 		faTable[currBlock] = currBlock+1;
 
 		currBlock++;
@@ -483,8 +486,6 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 	if(foundFile != 0x00000000) {
 
-		// printf("Found file to process: %s\n",foundFile->name);
-
 		uint32_t fileOffset = 0;
 		uint32_t currBlock = foundFile->startBlock;
 
@@ -492,6 +493,8 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 			currBlock = faTable[currBlock];
 			fileOffset++;
 		}
+
+		printf("Found file to process: %s start block: %d currBlock: %d nextBlocK: %d\n",foundFile->name,foundFile->startBlock,currBlock,faTable[currBlock]);
 
 		if(foundFile->isDir) {
 
@@ -513,7 +516,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
 
-				// printf("Writing filename: %s\n",tok);
+				printf("Writing filename: %s cluster: %d\n",tok,newFolderSetting.firstClusterLow);
 
 				memset(newFolderSetting.sfname,0x20,8);
 
