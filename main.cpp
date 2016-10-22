@@ -560,7 +560,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				newFolderSetting.time2 = 0x0000;
 				newFolderSetting.firstClusterLow = foundFile->subFiles[i+dirOffset].startBlock&0xffff;
 
-				printf("Writing filename: %s cluster: %d size: %d\n",tok,newFolderSetting.firstClusterLow,foundFile->subFiles[i+dirOffset].requiredBlocks,sizeof(struct fatCluster));
+				printf("Writing filename: %s cluster: %d size: %d\n",foundFile->subFiles[i+dirOffset].fullPath,newFolderSetting.firstClusterLow,foundFile->subFiles[i+dirOffset].requiredBlocks,sizeof(struct fatCluster));
 
 				newFolderSetting.fileSize = 0;
 
