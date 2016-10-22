@@ -538,11 +538,19 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
 
 				memset(newFolderSetting.sfname,0x20,8);
+				memset(newFolderSetting.sfext,0x20,3);
 
-				memcpy(newFolderSetting.sfext,"MP3",3);
-				memcpy(newFolderSetting.sfname,tok,MIN(8,strlen(tok)-1));
+				memcpy(newFolderSetting.sfname,tok,MIN(8,strlen(tok)));
 
+				tok =strtok(NULL, ".");
+
+				printf("Ext: %08x %s\n",tok,tok);
+
+				if(tok > 0) {
+					memcpy(newFolderSetting.sfext,tok,MIN(3,strlen(tok)));
+				}
 				convertToUpperCase((char*)&newFolderSetting.sfname,8);
+				convertToUpperCase((char*)&newFolderSetting.sfext,3);
 
 				// free(fileName);
 
