@@ -38,8 +38,8 @@ uint32_t treeBlocks, fatSectors;
 // mess with device and block size
 // ignoring lots of 5a and 1a commands turns ps3 off, may do same to ps4
 // weird fat32 (intial fat table repeating 128 inc over and over) crashes xmb
-// if mbr header doesn't match set file size then it will fall over
-// try making recursive folders
+// if mbr header doesn't match set file and block size then it will fall over
+// try making recursive folders do somethig
 
 uint32_t changeEndianness32(uint32_t num) {
 
