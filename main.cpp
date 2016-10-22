@@ -24,6 +24,8 @@ int gadgetFile, outEp, inEp;
 
 int fatFile, fileSize;
 
+char* rootFolder;
+
 static pthread_t gadgetThread, outThread, inThread;
 
 uint32_t treeBlocks, fatSectors;
@@ -421,9 +423,9 @@ void constructFat() {
 	uint32_t currSector = 3;
 
 	rootDir.isDir = true;
-	memcpy(rootDir.name,".",2);
+	memcpy(rootDir.name,rootFolder,strlen(rootFolder));
 	
-	treeBlocks = constructFileTree(&rootDir,".");
+	treeBlocks = constructFileTree(&rootDir,rootFolder);
 
 	fatSectors = treeBlocks*4/FILE_BLOCK_SIZE+1;
 
@@ -544,7 +546,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				tok =strtok(NULL, ".");
 
-				printf("Ext: %08x %s\n",tok,tok);
+				// printf("Ext: %08x %s\n",tok,tok);
 
 				if(tok > 0) {
 					memcpy(newFolderSetting.sfext,tok,MIN(3,strlen(tok)));
@@ -893,12 +895,12 @@ static void* outCheck(void* nothing) {
 
 					memset(cbwBuff,0xff,cbw.length);
 
-					lseek(fatFile,offsetPointer * FILE_BLOCK_SIZE,SEEK_SET);
+					// lseek(fatFile,offsetPointer * FILE_BLOCK_SIZE,SEEK_SET);
 
 					read(outEp,cbwBuff,cbw.length);
 
-					int fatFileReadRet = write(fatFile,cbwBuff,cbw.length);
-					printf("Writing offset: %08x ret: %d\n",offsetPointer,fatFileReadRet);
+					// int fatFileReadRet = write(fatFile,cbwBuff,cbw.length);
+					printf("Writing offset: %08x ret: (blocked)\n",offsetPointer);
 					csw.residue = FILE_BLOCK_SIZE;
 
 					break;
@@ -1133,11 +1135,16 @@ static void* gadgetCfgCb(void* nothing) {
 	}
 }
 
-int main() {
+int main(int argc, char** argv) {
+
+	if(argc < 2) {
+
+		printf("Select a directory\n");
+	}
+
+	rootFolder = argv[1];
 
 	setupEpSize();
-	// setupMbr();
-
 	constructFat();
 
 #if 0
