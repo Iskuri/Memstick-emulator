@@ -82,7 +82,8 @@ struct fatCluster {
 	char sfname[8];
 	char sfext[3];
 	uint8_t attrib;
-	unsigned char extra[10];
+	unsigned char extra[8];
+	uint16_t firstClusterHigh;
 	uint16_t time1;
 	uint16_t time2;
 	uint16_t firstClusterLow;
@@ -559,6 +560,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				newFolderSetting.time1 = 0x0000;
 				newFolderSetting.time2 = 0x0000;
 				newFolderSetting.firstClusterLow = foundFile->subFiles[i+dirOffset].startBlock&0xffff;
+				newFolderSetting.firstClusterHigh = foundFile->subFiles[i+dirOffset].startBlock>>16;
 
 				printf("Writing filename: %s cluster: %d size: %d\n",foundFile->subFiles[i+dirOffset].fullPath,newFolderSetting.firstClusterLow,foundFile->subFiles[i+dirOffset].requiredBlocks,sizeof(struct fatCluster));
 
