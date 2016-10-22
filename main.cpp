@@ -356,11 +356,16 @@ uint32_t constructFileTree(struct File* currFile, char* currPath) {
 
 					int tmpFile = open(newFilePath,O_RDWR);
 
-					currFile->subFiles[inc].requiredBlocks = (lseek(tmpFile, 0, SEEK_END)/FILE_BLOCK_SIZE)+1;
+					if(tmpFile > 0) {
+						currFile->subFiles[inc].requiredBlocks = (lseek(tmpFile, 0, SEEK_END)/FILE_BLOCK_SIZE)+1;
+
+						close(tmpFile);
+					} else {
+						currFile->subFiles[inc].requiredBlocks = 0;
+					}
 
 					blockCount += currFile->subFiles[inc].requiredBlocks;
 
-					close(tmpFile);
 				}
 				free(newFilePath);
 				inc++;
@@ -383,22 +388,32 @@ void constructFatSectors(struct File* currFile) {
 
 	currFile->startBlock = currBlock;
 
+	uint32_t previousBlock = 0xffffffff;
+
 	for(int i = 0 ; i < currFile->requiredBlocks ; i++) {
 
 		// printf("Assigning block: %d to %s\n",currBlock,currFile->fullPath);
 
-		faTable[currBlock] = currBlock+1;
+		// faTable[currBlock] = currBlock+1;
 
-		currBlock++;
+		// currBlock++;
+
+		if(previousBlock != 0xffffffff) {
+			faTable[previousBlock] = currBlock;
+		}
 
 		faTable[currBlock] = 0xffffffff;	
+
+		printf("Block: %d %08x cur: %d %08x\n",previousBlock,faTable[previousBlock],currBlock,faTable[currBlock]);
+
+		previousBlock = currBlock;
+
+		currBlock++;
 	}
 
 	for(int i = 0 ; i < currFile->numFiles ; i++) {
 		constructFatSectors(&currFile->subFiles[i]);
 	}
-
-
 }
 
 void constructFat() {
@@ -480,9 +495,13 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 	// recursively search for appropriate file data from offsets
 
+	sectorOffset += 2;
+
 	struct File* foundFile = findFileBlock(sectorOffset,&rootDir);
 
 	memset(cbwBuff,0x00,FILE_BLOCK_SIZE);
+
+	printf("At found file check: %d found file: %08x\n",sectorOffset,foundFile);
 
 	if(foundFile != 0x00000000) {
 
@@ -516,8 +535,6 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
 
-				printf("Writing filename: %s cluster: %d\n",tok,newFolderSetting.firstClusterLow);
-
 				memset(newFolderSetting.sfname,0x20,8);
 
 				memcpy(newFolderSetting.sfext,"MP3",3);
@@ -529,18 +546,28 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				newFolderSetting.time1 = 0x0000;
 				newFolderSetting.time2 = 0x0000;
-				newFolderSetting.firstClusterLow = foundFile->startBlock&0xffff;
+				newFolderSetting.firstClusterLow = foundFile->subFiles[i+dirOffset].startBlock&0xffff;
+
+				printf("Writing filename: %s cluster: %d\n",tok,newFolderSetting.firstClusterLow);
 
 				newFolderSetting.fileSize = 0;
 
 				if(foundFile->subFiles[i+dirOffset].isDir) {
 					newFolderSetting.attrib = ATTRIB_DIRECTORY;
+
+					newFolderSetting.fileSize = 0;
+
 				} else {
 					newFolderSetting.attrib = 0x00;	
 
 					int f = open(foundFile->subFiles[i+dirOffset].fullPath,O_RDWR);
-					newFolderSetting.fileSize = lseek(f, 0, SEEK_END);
-					close(f);
+
+					if(f > 0) {
+						newFolderSetting.fileSize = lseek(f, 0, SEEK_END);
+						close(f);
+					} else {
+						newFolderSetting.fileSize = 0;
+					}
 
 				}
 
