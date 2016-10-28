@@ -326,6 +326,7 @@ uint32_t constructFileTree(struct File* currFile, char* currPath) {
 
 		currFile->numFiles = fileCount;
 		currFile->subFiles =  (struct File*)malloc(fileCount*sizeof(struct File));
+		memset(currFile->subFiles,0x00,fileCount*sizeof(struct File));
 
 		closedir (dir);
 
@@ -548,6 +549,12 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				tok =strtok(NULL, ".");
 
 				// printf("Ext: %08x %s\n",tok,tok);
+
+				printf("Got name strlen: %d: ",strlen(newFolderSetting.sfname));
+				for(int i = 0 ; i < 8 ; i++) {
+					printf("%c(%02x) ",newFolderSetting.sfname[i],newFolderSetting.sfname[i]);
+				}
+				printf("\n");
 
 				if(tok > 0) {
 					memcpy(newFolderSetting.sfext,tok,MIN(3,strlen(tok)));
