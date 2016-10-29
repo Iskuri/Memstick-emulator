@@ -49,8 +49,13 @@ uint32_t changeEndianness32(uint32_t num) {
 		((num<<24)&0xff000000);
 }
 
+// this is broken due to broken mbr at least for 2048
 #define FILE_SIZE 0xC000000
-#define FILE_BLOCK_SIZE 512
+// #define FILE_BLOCK_SIZE 512
+#define FILE_BLOCK_SIZE 1024
+// #define FILE_BLOCK_SIZE 2048
+// #define FILE_BLOCK_SIZE 4096
+// #define FILE_BLOCK_SIZE 256
 
 // dosfs header
 // 00000000  eb 58 90 6d 6b 64 6f 73  66 73 00 00 02 01 20 00  |.X.mkdosfs.... .|
@@ -90,27 +95,9 @@ struct fatCluster {
 	uint32_t fileSize;
 } __attribute__((packed));
 
-unsigned char mbr[0x200] = {
-	0xeb, 0x58, 0x90, 0x6d, 0x6b, 0x64, 0x6f, 0x73, 0x66, 0x73, 0x00, 0x00, 0x02, 0x01, 0x20, 0x00,
-	0x02, 0x00, 0x00, 0x00, 0x80, 0xf8, 0x00, 0x00, 0x20, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0xfc, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
-	0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x29, 0x05, 0xa2, 0x5e, 0xc6, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20, 0x20,
-	0x20, 0x20, 0x46, 0x41, 0x54, 0x33, 0x32, 0x20, 0x20, 0x20, 0x0e, 0x1f, 0xbe, 0x77, 0x7c, 0xac,
-	0x22, 0xc0, 0x74, 0x0b, 0x56, 0xb4, 0x0e, 0xbb, 0x07, 0x00, 0xcd, 0x10, 0x5e, 0xeb, 0xf0, 0x32,
-	0xe4, 0xcd, 0x16, 0xcd, 0x19, 0xeb, 0xfe, 0x54, 0x68, 0x69, 0x73, 0x20, 0x69, 0x73, 0x20, 0x6e,
-	0x6f, 0x74, 0x20, 0x61, 0x20, 0x62, 0x6f, 0x6f, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x20, 0x64, 0x69,
-	0x73, 0x6b, 0x2e, 0x20, 0x20, 0x50, 0x6c, 0x65, 0x61, 0x73, 0x65, 0x20, 0x69, 0x6e, 0x73, 0x65,
-	0x72, 0x74, 0x20, 0x61, 0x20, 0x62, 0x6f, 0x6f, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x20, 0x66, 0x6c,
-	0x6f, 0x70, 0x70, 0x79, 0x20, 0x61, 0x6e, 0x64, 0x0d, 0x0a, 0x70, 0x72, 0x65, 0x73, 0x73, 0x20,
-	0x61, 0x6e, 0x79, 0x20, 0x6b, 0x65, 0x79, 0x20, 0x74, 0x6f, 0x20, 0x74, 0x72, 0x79, 0x20, 0x61,
-	0x67, 0x61, 0x69, 0x6e, 0x20, 0x2e, 0x2e, 0x2e, 0x20, 0x0d, 0x0a, 0x00, 0x00, 0x00, 0x00, 0x00,
-	0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00
-};
-
 unsigned char fullMbr[] = {
-  0xeb, 0x58, 0x90, 0x6d, 0x6b, 0x64, 0x6f, 0x73, 0x66, 0x73, 0x00, 0x00,
-  0x02, 0x01, 0x20, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x00,
+  0xeb, 0x58, 0x90, 0x6d, 0x6b, 0x64, 0x6f, 0x73, 0x66, 0x73, 0x00, 0x00, 0x02, 
+  0x01, 0x20, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0xf8, 0x00, 0x00,
   0x20, 0x00, 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0xd0, 0x07, 0x00,
   0x63, 0x0f, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0x00, 0x00, 0x00,
   0x01, 0x00, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -283,17 +270,6 @@ unsigned char fullMbr[] = {
 };
 
 uint32_t* faTable;
-
-void setupMbr() {
-
-	memset(&mbr[0xe0],0x0,0x200-0xe0);
-	mbr[510] = 0x55;
-	mbr[511] = 0xaa;
-
-	// memset(faTable,0x00,32768);
-
-//	faTable[2] = 0xffffffff;
-}
 
 struct File {
 	bool isDir;
@@ -539,7 +515,11 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				// char* fileName = (char*)malloc(10);
 				// sprintf(fileName,"FILE%d",fileOffset);
 
-				char* tok =strtok(foundFile->subFiles[i+dirOffset].name, ".");
+				char* nameString = (char*)malloc(strlen(foundFile->subFiles[i+dirOffset].name)+2);
+
+				strcpy(nameString,foundFile->subFiles[i+dirOffset].name);
+
+				char* tok =strtok(nameString, ".");
 
 				memset(newFolderSetting.sfname,0x20,8);
 				memset(newFolderSetting.sfext,0x20,3);
@@ -548,17 +528,19 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 
 				tok =strtok(NULL, ".");
 
-				// printf("Ext: %08x %s\n",tok,tok);
+				// printf("Ext: %08x %s original: %s\n",tok,tok,foundFile->subFiles[i+dirOffset].name);
 
-				printf("Got name strlen: %d: ",strlen(newFolderSetting.sfname));
-				for(int i = 0 ; i < 8 ; i++) {
-					printf("%c(%02x) ",newFolderSetting.sfname[i],newFolderSetting.sfname[i]);
-				}
-				printf("\n");
+				// printf("Got name strlen: %d: ",strlen(tok));
+				// for(int i = 0 ; i < 8 ; i++) {
+				// 	printf("%c(%02x) ",newFolderSetting.sfname[i],newFolderSetting.sfname[i]);
+				// }
+				// printf("\n");
 
 				if(tok > 0) {
 					memcpy(newFolderSetting.sfext,tok,MIN(3,strlen(tok)));
 				}
+
+				free(nameString);
 				convertToUpperCase((char*)&newFolderSetting.sfname,8);
 				convertToUpperCase((char*)&newFolderSetting.sfext,3);
 
@@ -569,7 +551,7 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 				newFolderSetting.firstClusterLow = foundFile->subFiles[i+dirOffset].startBlock&0xffff;
 				newFolderSetting.firstClusterHigh = foundFile->subFiles[i+dirOffset].startBlock>>16;
 
-				printf("Writing filename: %s cluster: %d size: %d\n",foundFile->subFiles[i+dirOffset].fullPath,newFolderSetting.firstClusterLow,foundFile->subFiles[i+dirOffset].requiredBlocks,sizeof(struct fatCluster));
+				// printf("Writing filename: %s cluster: %d size: %d\n",foundFile->subFiles[i+dirOffset].fullPath,newFolderSetting.firstClusterLow,foundFile->subFiles[i+dirOffset].requiredBlocks,sizeof(struct fatCluster));
 
 				newFolderSetting.fileSize = 0;
 
@@ -615,6 +597,8 @@ void processCluster(unsigned char* cbwBuff, uint32_t sectorOffset) {
 	}
 
 }
+
+// #define STANDARD_BLOCK_SIZE 512
 
 void processRead(unsigned char* cbwBuff,int offsetPointer) {
 
@@ -676,8 +660,8 @@ unsigned char inEpDesc[] = {0x01,0x00,0x00,0x00,0x07, 0x05, 0x81, 0x02, 0x00, 0x
 
 void setupEpSize() {
 
-	// uint8_t msB = (FILE_BLOCK_SIZE&0xff00)>>8;
-	// uint8_t lsB = (FILE_BLOCK_SIZE&0xff);
+	uint8_t msB = (FILE_BLOCK_SIZE&0xff00)>>8;
+	uint8_t lsB = (FILE_BLOCK_SIZE&0xff);
 
 	// outEpDesc[8] = lsB;
 	// outEpDesc[9] = msB;
@@ -697,8 +681,13 @@ void setupEpSize() {
 	// dumpedDescriptor[58] = lsB;
 	// dumpedDescriptor[59] = msB;
 	// dumpedDescriptor[65] = lsB;
-	// dumpedDescriptor[66] = msB;
+	dumpedDescriptor[66] = msB;
 
+	// dumpedDescriptor[70] = lsB;
+	// dumpedDescriptor[71] = msB;
+
+	fullMbr[11] = lsB;
+	fullMbr[12] = msB;
 }
 
 uint8_t borrowedSenseData[] = {
@@ -808,6 +797,8 @@ static void* outCheck(void* nothing) {
 			csw.residue = cbw.length;
 
 			unsigned char* cbwBuff = (unsigned char*)malloc(cbw.length);
+
+			printf("Running command %02x\n",cbw.cmd[0]);
 
 			switch(cbw.cmd[0]) {
 
@@ -975,7 +966,7 @@ static void handleSetup(struct usb_ctrlrequest *setup) {
 	uint16_t index = __le16_to_cpu(setup->wIndex);
 	uint16_t length = __le16_to_cpu(setup->wLength);
 
-	// printf("Got USB bRequest: %d(%02x) with type %d(%02x dir:(%02x)) value: %04x of length %d\n",setup->bRequest,setup->bRequest,setup->bRequestType, setup->bRequestType, setup->bRequestType&0x80, value, setup->wLength);
+	printf("Got USB bRequest: %d(%02x) with type %d(%02x dir:(%02x)) value: %04x of length %d\n",setup->bRequest,setup->bRequest,setup->bRequestType, setup->bRequestType, setup->bRequestType&0x80, value, setup->wLength);
 
 	// start transactions
 
@@ -1063,7 +1054,7 @@ static void* inCheck(void* nothing) {
     pollRecv.fd=inEp;
     pollRecv.events=POLLIN | POLLOUT | POLLHUP;;
 
-	unsigned char inBuff[512];
+	unsigned char inBuff[FILE_BLOCK_SIZE];
 
 	while(1) {
 
@@ -1072,7 +1063,7 @@ static void* inCheck(void* nothing) {
 		if(pollVal >= 0) {
 
 //			printf("Got in poll!\n");
-			int writeVal = write(inEp,inBuff,512);
+			int writeVal = write(inEp,inBuff,FILE_BLOCK_SIZE);
 
 			// printf("Poll write val: %d\n",writeVal);
 
