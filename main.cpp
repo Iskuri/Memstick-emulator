@@ -52,10 +52,17 @@ uint32_t changeEndianness32(uint32_t num) {
 // this is broken due to broken mbr at least for 2048
 #define FILE_SIZE 0xC000000
 // #define FILE_BLOCK_SIZE 512
-#define FILE_BLOCK_SIZE 1024
+// #define FILE_BLOCK_SIZE 768
+// #define FILE_BLOCK_SIZE 1024
 // #define FILE_BLOCK_SIZE 2048
-// #define FILE_BLOCK_SIZE 4096
+#define FILE_BLOCK_SIZE 4096
+// #define FILE_BLOCK_SIZE 8192
+// #define FILE_BLOCK_SIZE 16384
+// #define FILE_BLOCK_SIZE 32768
 // #define FILE_BLOCK_SIZE 256
+// #define FILE_BLOCK_SIZE 128
+// #define FILE_BLOCK_SIZE 64
+
 
 // dosfs header
 // 00000000  eb 58 90 6d 6b 64 6f 73  66 73 00 00 02 01 20 00  |.X.mkdosfs.... .|
@@ -605,6 +612,8 @@ void processRead(unsigned char* cbwBuff,int offsetPointer) {
 	// printf("Processing read on: %d(0x%02x)\n",offsetPointer,offsetPointer);
 
 	if(offsetPointer < 2) {
+	// if(offsetPointer < 1) {
+	// if(offsetPointer < 8) {
 
 		memcpy(cbwBuff,&fullMbr[offsetPointer*FILE_BLOCK_SIZE],FILE_BLOCK_SIZE);
 
@@ -663,28 +672,30 @@ void setupEpSize() {
 	uint8_t msB = (FILE_BLOCK_SIZE&0xff00)>>8;
 	uint8_t lsB = (FILE_BLOCK_SIZE&0xff);
 
-	// outEpDesc[8] = lsB;
-	// outEpDesc[9] = msB;
-	// outEpDesc[15] = lsB;
-	// outEpDesc[16] = msB;
+	// if(FILE_BLOCK_SIZE < 512) {
+	// 	outEpDesc[8] = lsB;
+	// 	outEpDesc[9] = msB;
+	// 	outEpDesc[15] = lsB;
+	// 	outEpDesc[16] = msB;
 
-	// inEpDesc[8] = lsB;
-	// inEpDesc[9] = msB;
-	// inEpDesc[15] = lsB;
-	// inEpDesc[16] = msB;
+	// 	inEpDesc[8] = lsB;
+	// 	inEpDesc[9] = msB;
+	// 	inEpDesc[15] = lsB;
+	// 	inEpDesc[16] = msB;
 
-	// dumpedDescriptor[26] = lsB;
-	// dumpedDescriptor[27] = msB;
-	// dumpedDescriptor[33] = lsB;
-	// dumpedDescriptor[34] = msB;
+	// 	dumpedDescriptor[26] = lsB;
+	// 	dumpedDescriptor[27] = msB;
+	// 	dumpedDescriptor[33] = lsB;
+	// 	dumpedDescriptor[34] = msB;
 
-	// dumpedDescriptor[58] = lsB;
-	// dumpedDescriptor[59] = msB;
-	// dumpedDescriptor[65] = lsB;
-	dumpedDescriptor[66] = msB;
+	// 	dumpedDescriptor[58] = lsB;
+	// 	dumpedDescriptor[59] = msB;
+	// 	dumpedDescriptor[65] = lsB;
+	// 	dumpedDescriptor[66] = msB;
 
-	// dumpedDescriptor[70] = lsB;
-	// dumpedDescriptor[71] = msB;
+	// 	dumpedDescriptor[70] = lsB;
+	// 	dumpedDescriptor[71] = msB;
+	// }
 
 	fullMbr[11] = lsB;
 	fullMbr[12] = msB;
@@ -798,7 +809,7 @@ static void* outCheck(void* nothing) {
 
 			unsigned char* cbwBuff = (unsigned char*)malloc(cbw.length);
 
-			printf("Running command %02x\n",cbw.cmd[0]);
+			// printf("Running command %02x\n",cbw.cmd[0]);
 
 			switch(cbw.cmd[0]) {
 
