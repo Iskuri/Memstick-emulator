@@ -51,18 +51,7 @@ uint32_t changeEndianness32(uint32_t num) {
 
 // this is broken due to broken mbr at least for 2048
 #define FILE_SIZE 0xC000000
-// #define FILE_BLOCK_SIZE 512
-// #define FILE_BLOCK_SIZE 768
-// #define FILE_BLOCK_SIZE 1024
-// #define FILE_BLOCK_SIZE 2048
-#define FILE_BLOCK_SIZE 4096
-// #define FILE_BLOCK_SIZE 8192
-// #define FILE_BLOCK_SIZE 16384
-// #define FILE_BLOCK_SIZE 32768
-// #define FILE_BLOCK_SIZE 256
-// #define FILE_BLOCK_SIZE 128
-// #define FILE_BLOCK_SIZE 64
-
+#define FILE_BLOCK_SIZE 512
 
 // dosfs header
 // 00000000  eb 58 90 6d 6b 64 6f 73  66 73 00 00 02 01 20 00  |.X.mkdosfs.... .|
